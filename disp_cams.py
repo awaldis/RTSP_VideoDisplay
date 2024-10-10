@@ -68,46 +68,60 @@ def main(monitor_index=0):
             sample = appsink.emit('pull-sample')
             if sample:
                 buffer = sample.get_buffer()
-#                print(f"Buffer PTS: {buffer.pts}, DTS: {buffer.dts}, Duration: {buffer.duration}, Offset: {buffer.offset}, Size: {buffer.get_size()}")
+                print(f"Buffer PTS: {buffer.pts}, DTS: {buffer.dts}, Duration: {buffer.duration}, Offset: {buffer.offset}, Size: {buffer.get_size()}")
                 caps = sample.get_caps()
-#                print(f"Capabilities for stream {i + 1}: {caps.to_string()}")
+#                 print(f"Capabilities for stream {i + 1}: {caps.to_string()}")
+                print("----------------------------")
                 width = caps.get_structure(0).get_value('width')
                 height = caps.get_structure(0).get_value('height')
                 timestamp = buffer.pts / Gst.SECOND
- #               print(f"Stream {i + 1}: Width = {width}, Height = {height}, Timestamp = {timestamp}")
+#                 print(f"Stream {i + 1}: Width = {width}, Height = {height}, Timestamp = {timestamp}")
                 
                 # Extract the frame and convert it to numpy array
-  #              print(f"Buffer size: {buffer.get_size()}")
-   #             print(f"Width: {width}, Height: {height}, Expected size: {height * width * 3}")
+#                 print(f"Buffer size: {buffer.get_size()}")
+#                 print(f"Width: {width}, Height: {height}, Expected size: {height * width * 3}")
                 success, info = buffer.map(Gst.MapFlags.READ)
                 if success:
                     data = buffer.extract_dup(0, buffer.get_size())
                     frame = np.frombuffer(data, np.uint8)
-#                    print(f"Frame length: {len(frame)}, Buffer length: {buffer.get_size()}")
+#                     print(f"Frame length: {len(frame)}, Buffer length: {buffer.get_size()}")
                     num_pixels = height * width
                     if len(frame) == num_pixels * 3:
                         # RGB format
- #                       print(f"Reshaping frame to RGB with dimensions ({height}, {width}, 3)")
+#                         print(f"Reshaping frame to RGB with dimensions ({height}, {width}, 3)")
                         frame = frame.reshape((height, width, 3))
                     elif caps.get_structure(0).get_value('format') == 'NV12':
                         # NV12 format with possible padding
                         padded_width = 768  # Adjust this value as per the actual padded width received
                         padded_height = 512  # Adjust this value as per the actual padded height received
-                        expected_size = padded_width * padded_height * 3 // 2
-                        if len(frame) == expected_size:
-#                            print(f"Handling NV12 format with padded dimensions ({padded_height}, {padded_width})")
+                        if True:
+#                             print(f"Handling NV12 format with padded dimensions ({padded_height}, {padded_width})")
                             # Reshape to Y plane and UV plane
-                            y_plane = frame[:padded_width * padded_height].reshape((padded_height, padded_width))
-                            uv_plane = frame[padded_width * padded_height:].reshape((padded_height // 2, padded_width))
+                            # Read Y plane
+                            y_plane = np.frombuffer(data, dtype=np.uint8, count=768*512)
+                            y_plane = y_plane.reshape((512, 768))
+
                             # Crop to valid region
-                            y_valid = y_plane[:height, :width]
-                            uv_valid = uv_plane[:height // 2, :width]
-                            # Merge Y and UV planes and convert to BGR
-                            yuv_cropped = np.vstack((y_valid, uv_valid))
-                            frame = cv2.cvtColor(yuv_cropped, cv2.COLOR_YUV2BGR_NV12)
-                        else:
-                            print(f"Warning: NV12 frame size mismatch. Expected {expected_size}, but got {len(frame)}")
-                            frame = np.zeros((height, width, 3), dtype=np.uint8)
+                            y_valid = y_plane[:480, :704]
+
+                            # Apply gamma correction to enhance brightness levels
+                            gamma = 1.5  # Adjust gamma value as needed
+                            y_valid = np.array(255 * (y_valid / 255) ** (1 / gamma), dtype=np.uint8)
+
+                            # Apply histogram equalization to enhance contrast
+                            #y_valid = cv2.equalizeHist(y_valid)
+
+                            # Calculate the starting index of the UV plane
+                            uv_start = 768 * 512
+
+                            # Read UV plane
+                            uv_plane = np.frombuffer(data, dtype=np.uint8, count=768*256, offset=uv_start)
+                            uv_plane = uv_plane.reshape((256, 768))
+
+                            # Crop to valid region
+                            uv_valid = uv_plane[:240, :352]
+
+                            frame = cv2.cvtColorTwoPlane(y_valid, uv_valid, cv2.COLOR_YUV2BGR_NV12)
                     elif len(frame) == num_pixels:
                         # Grayscale format
                         print(f"Reshaping frame to Grayscale with dimensions ({height}, {width})")
