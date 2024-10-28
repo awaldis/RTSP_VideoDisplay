@@ -30,8 +30,16 @@ def send_rtsp_setup(self):
         # Receive the response from the server
         response = self.client_socket.recv(4096)
         response_str = response.decode()
-        print("RTSP Server Response (SETUP):\n")
+        print("----RTSP Server Response (SETUP):----\n")
         print(response_str)
+
+        # Extract session ID if available
+        for line in response_str.split("\r\n"):
+            if line.startswith("Session:"):
+                self.session_id = line.split(" ")[1].split(";")[0]                
+                print(f"SETUP - Found Session ID: {self.session_id}")
+                break
+
         
     except Exception as e:
         print(f"Error: {e}")
