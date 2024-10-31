@@ -15,16 +15,18 @@ def recv_rtp_packets(rtp_port):
                 
                 # Parse the RTP header
                 rtp_header = struct.unpack('!BBHII', data[:12])
+                sequence_number = rtp_header[2]
                 timestamp = rtp_header[3]
-#                print(f"{timestamp} {data[16]}")
+#                print(f"SeqNum: {sequence_number} Time: {timestamp} {data[14]}")
                 
                 # Check if the packet is part of an IDR_W_RADL NAL unit
-                nal_unit_header = data[16]
-                nal_unit_type = nal_unit_header & 0x3F  # Extract NAL unit type (6 bits)
+                nal_unit_header = data[14]
+                nal_start_of_frag_unit = (nal_unit_header & 0x80) != 0  # (MSB)
+                nal_unit_type = nal_unit_header & 0x3F  # (lower 6 bits)
 
                 # IDR_W_RADL NAL unit type is typically 19 in HEVC
-                if nal_unit_type == 19:
-                    print(f"IDR_W_RADL packet received with timestamp: {timestamp}")
+                if nal_start_of_frag_unit and nal_unit_type == 19:
+                    print(f"IDR_W_RADL start packet received with timestamp: {timestamp}")
 
             except socket.timeout:
                 # Timeout occurred, continue to allow handling of KeyboardInterrupt
